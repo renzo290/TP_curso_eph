@@ -1,0 +1,377 @@
+---
+title: "Informalidad laboral en Argentina"
+author: "Renzo Falciglia - renzo.falciglia@gmail.com" 
+date: "17/12/2020"
+output:
+  html_document: 
+    toc: true
+    toc_float: true
+    code_folding: hide
+---
+
+```{r}
+
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE)
+
+```
+
+
+# Introducción
+
+<div class=text-justify>
+En este trabajo se analizó la informalidad laboral de los trabajadores ocupados en el segundo trimestre de 2020, en base a los datos de la EPH. Si bien existen distintas definiciones de informalidad laboral, para este análisis se consideró la definición de *informalidad legal*, que se refiere a trabajadores con empleo permanente pero no registrado legalmente. Para identificar si el empleo es legal o no, se observa si los trabajadores están registrados en la seguridad social y si tienen los beneficios de una relación laboral legal, como lo son las vacaciones pagas, los días por enfermedad, entre otros.  
+
+El análisis se realizó exclusivamente con los trabajadores ocupados.  No se tuvieron en cuenta para el análisis a los trabajadores independientes, donde la teoría indica que hay mayores niveles de informalidad que en los trabajadores ocupados.
+
+Se analizó la informalidad laboral de los trabajadores ocupados en general y también como varía dicha informalidad de acuerdo a distintas características de los trabajadores, como lo son el género, el decil de ingresos y el nivel educativo alcanzado. Y también se evaluó como varía la informalidad laboral de acuerdo a algunas características de las organizaciones donde se desempeñan, como por ejemplo el tamaño o el tipo de organización (pública o privada).
+
+La teoría indica que se debería encontrar mayor informalidad laboral en aquellas personas del género femenino, y en personas con un bajo nivel educativo alcanzado. A su vez, las organizaciones más chicas deberían registrar mayor informalidad que las mas grandes y las organizaciones del sector privado deberían alcanzar una mayor informalidad que las del sector público.
+A continuación se plantea la metodología utilizada y los resultados obtenidos.
+</div>
+
+
+# Metodología
+### Variables utilizadas
+
+<div class=text-justify>
+Para poder calcular la informalidad laboral, se utilizaron una serie de variables incluídas en la EPH y que hacen referencia a la situación laboral de los ocupados. Específicamente, se tomaron las siguientes variables:
+
+* __PP07G1:__ vacaciones pagas?
+* __PP07G2:__ aguinaldo?
+* __PP07G3:__ días pagos por enfermedad?
+* __PP07G4:__ obra social?
+* __PP07H:__ descuento jubilatorio?
+
+A su vez, se tomaron en cuenta una serie de variables para identificar a los individuos ocupados y el tipo de organización en la que trabajan:
+
+* __ESTADO:__ condición de actividad;
+* __CAT_OCUP:__ categoría ocupacional;
+* __PP04A:__ tipo de organización, estatal, privada, otra;
+
+Por último, se utilizaron una serie de variables para evaluar distintas características de los ocupados y ocupadas y de las empresas en que se desempeñan:
+
+* __PP04C:__ cuantas personas trabajan en el lugar?
+* __DECOCUR:__ número de decil de ingreso de la ocupación principal;
+* __NIVEL_ED:__ nivel educativo;
+* __CH04:__ sexo;
+* __P21:__ ingresos de la ocupación principal;
+</div>
+
+### Transformación de los datos
+
+<div class=text-justify>
+Para la transformación de los datos y la visualización, se utilizaron los paquetes *EPH*, *Tidyverse*, *kableExtra* y *treemap*. Se utilizó la base de la EPH del segundo trimestre de 2020.
+</div>
+
+```{r} 
+
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE)
+
+#install.packages("eph")
+#install.packages("tidyverse")
+#install.packages("kableExtra")
+#install.packages("treemap")
+
+library(eph)
+library(tidyverse)
+library(kableExtra)
+library(treemap)
+
+ind_2_20 <- get_microdata(year = 2020, trimester = 2, type = "individual")
+
+```
+
+<div class=text-justify>
+Para estimar la informalidad laboral, se creó una nueva variable denominada *Ocupado_inf*, que contiene un *0* si la persona tiene acceso a la seguridad social, vacaciones pagas, aguinaldo, días pagos por enfermedad y obra social, y un *1* en caso contrario. Cabe destacar que sólo se tomaron los casos en que hubo alguna respuesta (Si o No) para cada variable. De esta forma, todos los casos que tengan un *1* significan que la relación laboral de las personas es informal (de acuerdo a la definición de informalidad legal que se detalló en la introducción). A su vez, se seleccionaron y renombraron las variables y se filtraron los datos para limitar el análisis a los trabajadores y trabajadoras ocupados y con edad entre 18 y 65 años.
+
+Para poder determinar en que tipo de empresa se da mayor o menor informalidad, se creó una nueva variable denominada *Categoria_empresa* donde se le asignan distintas categorías de empresa (Micro, Pequeña, Mediana T1 y Mediana T2) de acuerdo a la cantidad de empleados que trabajan en cada una. Para determinar las distintas categorías se tuvo en cuenta el Cuadro B del anexo IV de la [Resolución 220/2019](http://servicios.infoleg.gob.ar/infolegInternet/anexos/320000-324999/322102/texact.htm) de la entonces Secretaría de Emprendedores y de la Pequeña y Mediana Empresa del entonces Ministerio de Producción y Trabajo. Dicha resolución define los criterios a tener en cuenta para considerar a las empresas como MiPyMEs. Se tomo el promedio de empleo de cada categoria.  </div>
+
+```{r}
+
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE)
+
+ind_2_20 <- ind_2_20 %>% 
+  filter(P21>0) %>% 
+  filter(PP07G1 %in% c(1,2),  
+         PP07G2 %in% c(1,2), 
+         PP07G3 %in% c(1,2),
+         PP07G4 %in% c(1,2),
+         PP07H  %in% c(1,2)) %>% 
+  mutate(Ocupado_inf = ifelse(PP07G1 == 1 & PP07G2 == 1 & PP07G3 == 1 & PP07G4 == 1 & PP07H == 1, 0, 1)) %>%
+  filter(ESTADO %in% c(1,3))  %>%
+  filter(PP04A %in% c(1,2,3)) %>% 
+  filter(CH06 >= 18 & CH06 <= 65) %>% 
+  select(ESTADO, CAT_OCUP, PP04A, DECOCUR, PP04C, NIVEL_ED, CH04, PONDERA, Ocupado_inf, CH06, REGION, P21, PONDIIO) %>% 
+  rename(Tipo_Organizacion = PP04A, Numero_Empleados = PP04C, Genero = CH04, Edad = CH06)
+
+ind_2_20 <- ind_2_20 %>% mutate(Tipo_Ocupacion = case_when(Ocupado_inf == 1 ~ "Informal",
+                                                           Ocupado_inf == 0 ~ "Formal"),
+                                Categoria_empresa = case_when(Numero_Empleados <= 6                           ~ "Micro",
+                                                              Numero_Empleados  > 6 & Numero_Empleados <= 8   ~ "Pequeña",
+                                                              Numero_Empleados >= 9 & Numero_Empleados <=10   ~ "Mediana T1",
+                                                              Numero_Empleados == 11                          ~ "Mediana T2",
+                                                              Numero_Empleados == 12                          ~ "Grande",
+                                                              Numero_Empleados == 99                          ~ "Sin dato"))
+
+ind_2_20 <- ind_2_20 %>% mutate(Tipo_Organizacion = case_when(Tipo_Organizacion == 1 ~ "Publica",
+                                                              Tipo_Organizacion == 2 ~ "Privada",
+                                                              Tipo_Organizacion == 3 ~ "Otra"),
+                                Genero = case_when(Genero == 1 ~ "Hombre",
+                                                    Genero == 2 ~ "Mujer"),
+                                NIVEL_ED = case_when(NIVEL_ED == 1 ~ "Prim. incompleta",
+                                                     NIVEL_ED == 2 ~ "Prim. completa",
+                                                     NIVEL_ED == 3 ~ "Sec. incompleta",
+                                                     NIVEL_ED == 4 ~ "Sec. completa",
+                                                     NIVEL_ED == 5 ~ "Univ. incompleta",
+                                                     NIVEL_ED == 6 ~ "Univ. completa",
+                                                     NIVEL_ED == 7 ~ "Sin instrucción",
+                                                     NIVEL_ED == 9 ~ "Ns./Nr.") )
+
+colnames(ind_2_20)
+dim(ind_2_20)
+
+```
+<div class=text-justify>
+Luego de la transformación realizada se obtuvo un data set de 9.457 observaciones con 13 variables renombradas.
+Para poder realizar el análisis correctamente, se transformaron las variables de *Genero*, *Nivel educativo*, *Ocupado informal* y *Tipo de organización* a variables de tipo factor. Todas las variables estaban definidas como numéricas, pero el hecho de transformarlas en factor facilita el análisis de la informalidad en las distintas categorías.
+
+A su vez, para la variable *Categoria de empresa*, y para la variable *Nivel educativo* se re-escalaron las distintas categorías, de modo tal que en todos los cuadros y análisis los tramos de empresas queden ordenados de menor tamaño (Micro) a mayor tamaño (Mediana T2) y el nivel educativo quede también ordenado del menor al mayor.
+</div>
+
+
+```{r}
+
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE)
+
+ind_2_20 <- ind_2_20 %>% mutate(Categoria_empresa = as_factor(Categoria_empresa),
+                                Genero = as_factor(Genero),
+                                NIVEL_ED = as_factor(NIVEL_ED),
+                                Ocupado_inf = as_factor(Ocupado_inf),
+                                Tipo_Organizacion = as_factor(Tipo_Organizacion),
+                                DECOCUR = as.numeric(DECOCUR))
+                                
+levels(ind_2_20$Categoria_empresa)
+
+ind_2_20$Categoria_empresa <- fct_relevel(ind_2_20$Categoria_empresa, 
+                        "Micro", "Pequeña", "Mediana T1", "Mediana T2", "Grande", "Sin dato") 
+
+ind_2_20$NIVEL_ED <- fct_relevel(ind_2_20$NIVEL_ED, 
+                        "Sin instrucción", "Prim. incompleta", "Prim. completa", "Sec. incompleta", "Sec. completa",
+                        "Univ. incompleta", "Univ. completa") 
+
+levels(ind_2_20$Categoria_empresa)
+
+```
+
+# Resultados
+
+<div class=text-justify>
+Para chequear que la metodología utilizada para el cálculo de la informalidad presente resultados similares a los encontrados en otros trabajos que miden este tipo de variables, se calcularon dos tablas con información sobre la informalidad en los distintos tipos de organizaciones (públicas o privadas) y sobre la informalidad en los distintos géneros (hombre y mujer). Si la metodología utilizada es consistente, se debería encontrar mayor informalidad en las organizaciones privadas que en las públicas, y mayor informalidad en el caso de las mujeres que en el caso de los hombres.
+</div>
+
+```{r}
+
+knitr::opts_chunk$set(
+	echo = FALSE,
+	message = FALSE,
+	warning = FALSE)
+
+#TIPO DE ORGANIZACIÓN
+
+tabla1 <- calculate_tabulates(base=ind_2_20, x='Tipo_Organizacion', y='Tipo_Ocupacion', weights = 'PONDERA',
+                    add.totals='row', add.percentage='row')
+tabla1 %>%
+  kbl() %>%
+  kable_paper("hover", full_width = T, position = "left")
+
+
+#GÉNERO
+
+tabla2 <- calculate_tabulates(base=ind_2_20, x='Genero', y='Tipo_Ocupacion', weights = 'PONDERA',
+                    add.totals='row', add.percentage='row') 
+tabla2 %>%
+  kbl() %>%
+  kable_paper("hover", full_width = T, position = "left")
+
+```
+
+<div class=text-justify>
+Efectivamente, el resultado encontrado es que existe un 25,1% de informalidad laboral entre los trabajadores ocupados en el segundo trimestre de 2020 y que la informalidad en las organizaciones privadas (30,9%) es mayor a la informalidad en las organizaciones públicas (10,3%). A su vez, se encuentra una mayor tasa de informalidad en el caso de las mujeres (26,6%) que en el caso de los hombres (24%). 
+
+Una vez verificados estos resultados, se analizó la informalidad de acuerdo al nivel educativo alcanzado por las personas y de acuerdo al tamaño de empresa (según la definición legal Micro, Pequeñas y Medianas empresas). Los resultados esperados en estos casos son que a menor nivel educativo alcanzado por los trabajadores y trabajadoras, mayor mayor sea la tasa de informalidad, a la vez que empresas de menor tamaño (con menor cantidad de trabajadores contratados) presenten también una mayor tasa de informalidad. A continuación se presentan dos gráficos que evalúan estas variables.
+</div>
+
+
+```{r, Gráficos por nivel educativo y tipo de empresa}
+
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE)
+
+#INFORMALIDAD POR NIVEL EDUCATIVO
+
+tabla3 <- ind_2_20 %>%  
+  filter(P21>0) %>%
+  group_by(NIVEL_ED) %>% 
+  summarise(Formales        = sum(PONDERA[Ocupado_inf == 0]),
+            Informales      = sum(PONDERA[Ocupado_inf == 1]),
+            Total           = sum(PONDERA),
+            Tasa_Informales = Informales/Total)
+
+ggplot(data = tabla3) +
+  geom_col(mapping = aes(x=NIVEL_ED, y=Tasa_Informales)) +
+  ggtitle ("Tasa de informalidad por nivel educativo") +
+  theme(legend.position="bottom")
+
+#INFORMALIDAD POR TIPO DE EMPRESA
+
+tabla4 <- ind_2_20 %>% 
+  filter(Tipo_Organizacion == "Privada", P21>0) %>% 
+  group_by(Categoria_empresa) %>% 
+  summarise(Formales        = sum(PONDERA[Ocupado_inf == 0]),
+            Informales      = sum(PONDERA[Ocupado_inf == 1]),
+            Total           = sum(PONDERA),
+            Tasa_Informales = Informales/Total)
+
+ggplot(data = tabla4) +
+  geom_col(mapping = aes(x=Categoria_empresa, y=Tasa_Informales)) +
+  ggtitle ("Tasa de informalidad por categoría de empresa") +
+  theme(legend.position="bottom")
+
+```
+
+<div class=text-justify>
+En estos gráficos se encuentra que en los niveles educativos *primaria incompleta*, *primaria completa* y *secundaria incompleta*, se registran los mayores niveles de informalidad, superando en todos los casos el 30%. A su vez, se encuentra que el nivel educativo *universitario completo* presenta una tasa de informalidad en torno al 12%, que es la más baja de todos los niveles educativos.
+
+En cuanto al tamaño de empresa, también se encuentra que a menor tamaño relativo, mayor es la tasa de informalidad de los empleados. Sobre todo, se destaca la tasa de informalidad de los trabajores y trabajadoras que se desempeñan en las *Micro empresas*, con tasas en torno a 57%. Este resultado es consistente ya que este tipo de empresas suelen ser las que tienen una menor estructura administrativa y menores recursos para registrar correctamente a sus trabajadores. En el resto de los tamaños de empresa, la tasa de informalidad baja significativamente, aunque las *Pequeñas empresas* registran una tasa de informalidad del 20%. En el caso de las empresas medianas, la informalidad baja aún más hasta ubicarse entre el 5% y 6,5%, mientras que las grandes registran la menor tasa de informalidad en sus trabajores, ubicándose por debajo del 3%.
+
+Se presentan también dos gráficos donde se combinan la información del nivel educativo de las personas y el tamaño de empresa en la que se desempeñan. La intuición en este caso indica que aquellas empresas más chicas en tamaño realizan tareas de menor complejidad y que, por lo tanto, no necesitan de empleados con un alto nivel educativo alcanzado. Por el contrario, aquellas empresas más grandes en tamaño, requeriran recursos humanos más calificados, con altos niveles educativos alcanzados. A continuación se presenta un gráfico de barras con la cantidad total de trabajadores por tamaño de empresa y nivel educativo alcanzado y un *treemap* para poder observar más fácilmente las proporciones. 
+</div>
+
+```{r, Gráficos por tipo de empresa}
+
+#INFORMALIDAD POR TIPO DE EMPRESA
+
+tabla5 <- ind_2_20 %>% filter(Tipo_Organizacion == "Privada") %>% 
+  filter(P21>0) %>% 
+  group_by(Categoria_empresa, NIVEL_ED) %>% 
+  summarise(Formales        = sum(PONDERA[Ocupado_inf == 0]),
+            Informales      = sum(PONDERA[Ocupado_inf == 1]),
+            Total           = sum(PONDERA))
+            
+ggplot(data = tabla5) +
+  geom_col(mapping = aes(x=Categoria_empresa, y=Total, fill = NIVEL_ED)) +
+  ggtitle ("Cantidad de ocupados por nivel educativo") +
+  scale_y_continuous(limits = c(0, 2000000)) +
+  theme(legend.position="bottom")
+  
+tabla6 <- tabla5 %>% filter(Categoria_empresa != "Sin dato")
+                            
+treemap(tabla6,
+            index=c("Categoria_empresa","NIVEL_ED"),
+            vSize="Total",
+            type="index")
+
+```
+
+<div class=text-justify>
+En el primer gráfico se observa que las Micro empresas contratan en general más cantidad de trabajadores que el resto, y se destacan los trabajadores con niveles educativos de *secundaria completa*, *secundaria incompleta*, *primaria completa* y *primaria incompleta*. Si bien en este tipo de empresas existen trabajores con niveles universitarios alcanzados, proporcionalmente son mayoría aquellos trabajadores con niveles educativos menores. En el caso de las Pequeñas empresas y en las empresas Mediana Tramo 1, se destaca una proporción similar de trabajadores con niveles educativos universitarios que aquellos con niveles de educación secundaria. A su vez, ya no se registra un número importante de trabajadores con primaria incompleta en estos casos. Por último, en cuanto a las empresas Mediana Tramo 2 y a las grandes, se destaca una proporción importante de trabajadores con niveles educativos universitarios y, en menor medida, con educación secundaria.
+
+En el segundo gráfico se puede apreciar mejor las proporciones de cada nivel educativo en cada tamaño de empresa. Se destacan en el tamaño más chico de empresa los rectángulos de *secundaria completa e incompleta* y los de *primaria completa*, mientras que en las empresas más grandes se destacan los rectángulos de niveles superiores como el *universitario completo e incompleto*. 
+
+Por último, se analizó la informalidad laboral de acuerdo al decil de ingreso de las personas y de acuerdo al tipo de organización en la que se desempeñan. 
+</div>
+
+
+```{r, Gráficos por decil de ingresos}
+
+#INFORMALIDAD POR DECIL DE INGRESO SECTOR PRIVADO
+
+tabla7 <- ind_2_20 %>% filter(Tipo_Organizacion == "Privada") %>% 
+  filter(P21>0) %>% 
+  group_by(DECOCUR) %>% 
+  summarise(Formales        = sum(PONDIIO[Ocupado_inf == 0]),
+            Informales      = sum(PONDIIO[Ocupado_inf == 1]),
+            Total           = sum(PONDIIO),
+            Tasa_Informales = Informales/Total)
+
+tabla7 <- tabla7 %>% arrange(DECOCUR)
+            
+
+ggplot(data = tabla7) +
+  geom_col(mapping = aes(x=DECOCUR, y=Tasa_Informales)) +
+  ggtitle ("Tasa de informalidad por decil de ingresos sector privado") +
+  theme(legend.position="bottom")
+  
+
+#INFORMALIDAD POR DECIL DE INGRESO SECTOR PÚBLICO
+
+tabla8 <- ind_2_20 %>% filter(Tipo_Organizacion == "Publica") %>% 
+  filter(P21>0) %>% 
+  group_by(DECOCUR) %>% 
+  summarise(Formales        = sum(PONDIIO[Ocupado_inf == 0]),
+            Informales      = sum(PONDIIO[Ocupado_inf == 1]),
+            Total           = sum(PONDIIO),
+            Tasa_Informales = Informales/Total)
+
+tabla8 <- tabla8 %>% arrange(DECOCUR)
+            
+
+ggplot(data = tabla8) +
+  geom_col(mapping = aes(x=DECOCUR, y=Tasa_Informales)) +
+  ggtitle ("Tasa de informalidad por decil de ingresos sector público") +
+  theme(legend.position="bottom")
+
+```
+
+<div class=text-justify>
+En estos casos, también se demuestra lo que indica la teoria, al registrarse una mayor tasa de informalidad cuanto menor es el decil de ingreso de las personas. También se observa una diferencia entre las tasas de informalidad de acuerdo a los tipos de organización. Si bien se da un resultado similar tanto en el sector privado como en el sector público (a menor decil de ingreso mayor es la informaldiad), en el caso de las organizaciones del sector público las tasas de informalidad son menores a las del sector privado. Por ejemplo, en el decíl 1 de ingresos, los trabajadores del sector privado registran una tasa de informalidad del 88%, mientras que los del sector público del mismo decil, registran una tasa de informalidad del 65%.
+</div>
+
+# Conclusión
+
+<div class=text-justify>
+La informalidad laboral es un problema importante en la economía argentina, tanto desde el punto de vista de la protección social de los trabajores y trabajadoras como desde el punto de vista legal y recaudatorio. En este documento se propuso un análisis descriptivo de este fenómeno, a traves de una metodología de cálculo de la informalidad *legal*, con los datos del segundo trimestre de 2020 de la EPH. Se realizaron una serie de cálculos para determinar la informalidad según distintos aspectos como el género de las personas, el tamaño de empresa en la que trabajan, el nivel educativo alcanzado, el tipo de organización en la que se desempeñan y su decil de ingresos.
+
+La metodología utilizada a priori presentó resultados consistente con respecto a la evidencia que existe sobre el tema, mostrando una informalidad laboral mayor en el caso de las mujeres con respecto a los hombres y en las organizaciones privadas con respecto a las organizaciones públicas. Se encontró también que los trabajores con menores niveles educativos alcanzados y que trabajan en empresas relativamente más "chicas" presentan mayores niveles de informalidad, y que que esta problemática afecta en mayor medida a los deciles mas bajos de ingresos. 
+
+Otro aspecto interesante para profundizar en el análisis de este tema sería determinar en que medida evolucionó la tasa de informaldiad en el tiempo, con las distintas bases de la EPH, para determinar como impactó en esta problemática el contexto de pandemia que afrontó el país durante 2020.
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
